@@ -1,0 +1,610 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Clankers Leaderboard">
+  <div class="page">
+    <div class="bg-glow"></div>
+
+    <header>
+      <div class="logo">Clankers Leaderboard</div>
+      <nav>
+        <a href="https://github.com/UnsafeLabs/Bounty-Hunters" target="_blank">GitHub Repository</a>
+      </nav>
+    </header>
+
+    <div class="hero-banner">
+      <div class="banner-inner">
+        <div class="banner-text">
+          <h1>Open-Source Bot Blocklist</h1>
+          <p>This leaderboard data is freely available as JSON to help protect your open-source projects from automated bot accounts.</p>
+        </div>
+        <a class="banner-btn" href="https://github.com/UnsafeLabs/Bounty-Hunters/blob/main/clankers.json" target="_blank">Get JSON</a>
+      </div>
+    </div>
+
+    <main>
+      <!-- Podium -->
+      <div class="podium-area">
+        <div class="podium">
+          <!-- 2nd place -->
+          <div class="podium-spot" id="podium-2">
+            <img class="avatar" alt="" />
+            <div class="podium-name">--</div>
+            <div class="pedestal p2">
+              <div class="trophy">🥈</div>
+              <div class="points-label"><span class="points-count">--</span> PRs</div>
+            </div>
+          </div>
+
+          <!-- 1st place -->
+          <div class="podium-spot" id="podium-1">
+            <img class="avatar avatar-first" alt="" />
+            <div class="podium-name name-first">--</div>
+            <div class="pedestal p1">
+              <div class="trophy">🏆</div>
+              <div class="points-label"><span class="points-count">--</span> PRs</div>
+            </div>
+          </div>
+
+          <!-- 3rd place -->
+          <div class="podium-spot" id="podium-3">
+            <img class="avatar" alt="" />
+            <div class="podium-name">--</div>
+            <div class="pedestal p3">
+              <div class="trophy">🥉</div>
+              <div class="points-label"><span class="points-count">--</span> PRs</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats banner -->
+      <div class="stats-banner" id="stats-banner">
+        <span>Tracked <strong id="total-bots">--</strong> fully automated GitHub accounts with <strong id="total-prs">--</strong> total PRs — latest PR sent <strong id="last-updated">--</strong></span>
+      </div>
+
+      <!-- Table -->
+      <div class="table-card">
+        <div class="table-header">
+          <h2>Top Clankers</h2>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:50px">Rank</th>
+              <th>Username</th>
+              <th style="width:100px;white-space:nowrap">Total PRs</th>
+              <th style="width:150px">First PR</th>
+              <th style="width:150px">Last PR</th>
+              <th style="width:160px;white-space:nowrap">View all PRs</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="6" class="loading">Loading data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <footer>
+      <p>Data from <a href="https://github.com/UnsafeLabs/Bounty-Hunters" target="_blank">UnsafeLabs/Bounty-Hunters</a> &middot; Refreshes every 5 minutes</p>
+    </footer>
+  </div>
+</Layout>
+
+<script>
+  const TURSO_URL = 'https://clankers-leaderboard-stacymoon.aws-us-east-2.turso.io/v2/pipeline';
+  // Read-only token — safe to expose client-side, can only SELECT, cannot modify data
+  const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicm8iLCJleHAiOjE4MTAyODAwOTAsImlhdCI6MTc3ODc0NDA5MCwiaWQiOiIwMTllMjU2Ni0yNDAxLTdkYjctYTU0Ni0zMzljNTAxNDkxYmYiLCJyaWQiOiIxODUwZjIyMy04NjM1LTRmZTEtYjViMy02NTRhNDM5YTcxNGMifQ.VXSPG4VjZbG8sjycVkU6IAZOunP6h1igJHCzgqorNElVkqczDJEgpYgcIEPTcYcNRV06CKWtcyXFrt0XP90fAQ';
+
+  async function fetchFromTurso(): Promise<Clanker[]> {
+    const res = await fetch(TURSO_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${TURSO_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requests: [
+          { type: 'execute', stmt: { sql: 'SELECT username, total_prs, first_pr, last_pr FROM clankers ORDER BY total_prs DESC' } },
+          { type: 'close' }
+        ]
+      })
+    });
+    const data = await res.json();
+    const rows = data.results[0].response.result.rows;
+    return rows.map((row: any) => ({
+      username: row[0].value,
+      total_prs: parseInt(row[0 + 1].value),
+      first_pr: row[2].value,
+      last_pr: row[3].value,
+    }));
+  }
+
+  function formatDate(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleString('en-US', {
+      month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    });
+  }
+
+  interface Clanker {
+    username: string;
+    total_prs: number;
+    first_pr: string;
+    last_pr: string;
+  }
+
+  function ghAvatar(username: string): string {
+    return `https://wsrv.nl/?url=github.com/${username}.png&w=96&h=96&fit=cover&default=1`;
+  }
+
+  function ghProfile(username: string): string {
+    return `https://github.com/${username}`;
+  }
+
+  function renderPodium(data: Clanker[]) {
+    [
+      { el: document.getElementById('podium-1')!, i: 0 },
+      { el: document.getElementById('podium-2')!, i: 1 },
+      { el: document.getElementById('podium-3')!, i: 2 },
+    ].forEach(({ el, i }) => {
+      const bot = data[i];
+      if (!bot) return;
+      const img = el.querySelector('.avatar') as HTMLImageElement;
+      img.src = ghAvatar(bot.username);
+      img.alt = bot.username;
+      el.querySelector('.podium-name')!.textContent = bot.username;
+      el.querySelector('.points-count')!.textContent = bot.total_prs.toLocaleString();
+    });
+  }
+
+  function renderTable(data: Clanker[]) {
+    const tbody = document.getElementById('table-body')!;
+    tbody.innerHTML = data.map((bot, i) => {
+      const rank = i + 1;
+      const rankDisplay = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+      return `<tr class="${rank <= 3 ? 'top-row' : ''}">
+        <td class="rank">${rankDisplay}</td>
+        <td class="username"><a href="${ghProfile(bot.username)}" target="_blank">${bot.username}</a></td>
+        <td class="prs">${bot.total_prs.toLocaleString()}</td>
+        <td class="date">${formatDate(bot.first_pr)}</td>
+        <td class="date">${formatDate(bot.last_pr)}</td>
+        <td class="view-prs"><a href="https://github.com/UnsafeLabs/Bounty-Hunters/pulls?q=is%3Apr+author%3A${bot.username}" target="_blank">View on GitHub &#x2197;</a></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function timeAgo(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const secs = Math.floor(diff / 1000);
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (mins > 0) return `${mins}m ago`;
+    if (secs > 0) return `${secs}s ago`;
+    return 'just now';
+  }
+
+  let latestPrTime = '';
+
+  function renderStats(data: Clanker[]) {
+    const total = data.reduce((s, b) => s + b.total_prs, 0);
+    document.getElementById('total-prs')!.textContent = total.toLocaleString();
+    document.getElementById('total-bots')!.textContent = data.length.toString();
+    const latest = data.reduce((a, b) => (a.last_pr > b.last_pr ? a : b));
+    latestPrTime = latest.last_pr;
+    document.getElementById('last-updated')!.textContent = timeAgo(latestPrTime);
+  }
+
+  setInterval(() => {
+    if (latestPrTime) {
+      document.getElementById('last-updated')!.textContent = timeAgo(latestPrTime);
+    }
+  }, 60000);
+
+  async function loadData() {
+    try {
+      const data = await fetchFromTurso();
+      renderPodium(data);
+      renderTable(data);
+      renderStats(data);
+    } catch {
+      document.getElementById('table-body')!.innerHTML =
+        '<tr><td colspan="6" class="loading">Failed to load data</td></tr>';
+    }
+  }
+
+  loadData();
+  setInterval(loadData, 300000);
+</script>
+
+<style is:global>
+  .page {
+    min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .bg-glow {
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 600px;
+    background: radial-gradient(ellipse, rgba(180, 100, 40, 0.15) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.2rem 2rem;
+    border-bottom: 1px solid rgba(180, 120, 60, 0.15);
+  }
+
+  .logo {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #f0d9b5;
+    letter-spacing: -0.5px;
+  }
+
+  nav a {
+    color: #9a8a75;
+    text-decoration: none;
+    font-size: 0.8rem;
+    transition: color 0.2s;
+  }
+  nav a:hover { color: #f0d9b5; }
+
+  .hero-banner {
+    position: relative;
+    z-index: 1;
+    margin: 1.5rem 2rem 0;
+  }
+
+  .banner-inner {
+    background: linear-gradient(135deg, rgba(120, 60, 20, 0.3), rgba(60, 30, 10, 0.5));
+    border: 1px solid rgba(180, 120, 60, 0.2);
+    border-radius: 16px;
+    padding: 1.2rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .banner-btn {
+    display: inline-block;
+    padding: 0.5rem 1.2rem;
+    background: rgba(220, 160, 60, 0.2);
+    border: 1px solid rgba(220, 160, 60, 0.4);
+    border-radius: 8px;
+    color: #e8c88a;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .banner-btn:hover {
+    background: rgba(220, 160, 60, 0.35);
+    border-color: rgba(220, 160, 60, 0.6);
+  }
+
+  .banner-text h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #f0d9b5;
+  }
+
+  .banner-text p {
+    font-size: 0.75rem;
+    color: #9a8a75;
+    margin-top: 0.2rem;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  /* Podium */
+  .podium-area {
+    padding: 3rem 0 1.5rem;
+  }
+
+  .podium {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 1rem;
+  }
+
+  .podium-spot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 3px solid rgba(180, 120, 60, 0.4);
+    background: #1a1208;
+    margin-bottom: 0.5rem;
+    object-fit: cover;
+  }
+
+  .avatar-first {
+    width: 88px;
+    height: 88px;
+    border-color: rgba(220, 160, 60, 0.6);
+    box-shadow: 0 0 30px rgba(220, 160, 60, 0.2);
+  }
+
+  .podium-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #f0d9b5;
+    margin-bottom: 0.5rem;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .name-first {
+    font-size: 1rem;
+  }
+
+  .pedestal {
+    width: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 12px 12px 0 0;
+    padding: 1rem 0.5rem;
+    background: linear-gradient(180deg, rgba(100, 60, 25, 0.4) 0%, rgba(40, 22, 8, 0.6) 100%);
+    border: 1px solid rgba(180, 120, 60, 0.2);
+    border-bottom: none;
+  }
+
+  .p1 {
+    height: 140px;
+    background: linear-gradient(180deg, rgba(140, 80, 30, 0.4) 0%, rgba(50, 28, 10, 0.6) 100%);
+    border-color: rgba(220, 160, 60, 0.25);
+  }
+
+  .p2 {
+    height: 100px;
+  }
+
+  .p3 {
+    height: 80px;
+  }
+
+  .trophy {
+    font-size: 1.8rem;
+  }
+
+  .points-label {
+    font-size: 0.7rem;
+    color: #9a8a75;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .points-count {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #e8c88a;
+    display: block;
+    text-align: center;
+  }
+
+  /* Stats banner */
+  .stats-banner {
+    text-align: center;
+    margin: 1.5rem 0 2rem;
+    padding: 0.7rem 1.5rem;
+    background: linear-gradient(90deg, rgba(100, 60, 25, 0.2), rgba(140, 80, 30, 0.3), rgba(100, 60, 25, 0.2));
+    border: 1px solid rgba(180, 120, 60, 0.2);
+    border-radius: 10px;
+    font-size: 0.8rem;
+    color: #9a8a75;
+  }
+
+  .stats-banner strong {
+    color: #e8c88a;
+  }
+
+  /* Table card */
+  .table-card {
+    background: linear-gradient(180deg, rgba(30, 18, 8, 0.6), rgba(15, 10, 5, 0.8));
+    border: 1px solid rgba(180, 120, 60, 0.15);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(180, 120, 60, 0.1);
+  }
+
+  .table-header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #f0d9b5;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  thead {
+    background: rgba(40, 25, 12, 0.5);
+  }
+
+  th {
+    padding: 0.7rem 1rem;
+    text-align: left;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: #b5a08a;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(180, 120, 60, 0.1);
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    font-size: 0.8rem;
+    border-bottom: 1px solid rgba(180, 120, 60, 0.06);
+    color: #c4b49a;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover {
+    background: rgba(120, 70, 30, 0.1);
+  }
+
+  tr.top-row {
+    background: rgba(120, 70, 30, 0.08);
+  }
+
+  .rank {
+    width: 60px;
+    text-align: center;
+    font-weight: 600;
+    color: #6b5d4d;
+  }
+
+  tr.top-row .rank {
+    font-size: 1.1rem;
+  }
+
+  .avatar-cell {
+    padding: 0.5rem 0.3rem;
+    text-align: center;
+  }
+
+  .avatar-cell img {
+    border-radius: 50%;
+    background: #1a1208;
+    border: 1px solid rgba(180, 120, 60, 0.2);
+    object-fit: cover;
+    vertical-align: middle;
+  }
+
+  .username {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .username a {
+    color: #ffffff;
+    text-decoration: underline;
+    text-decoration-color: #e8c88a;
+    text-underline-offset: 3px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  .username a:hover {
+    color: #e8c88a;
+  }
+
+  .prs {
+    font-weight: 700;
+    color: #e8c88a;
+    white-space: nowrap;
+  }
+
+  .date {
+    color: #b5a08a;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .view-prs a {
+    color: #e8c88a;
+    text-decoration: underline;
+    text-decoration-color: #e8c88a;
+    text-underline-offset: 3px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  .view-prs a:hover {
+    color: #f0d9b5;
+  }
+
+  .loading {
+    text-align: center;
+    color: #6b5d4d;
+    padding: 2rem;
+  }
+
+  footer {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 1.5rem 0 2rem;
+    color: #3d3228;
+    font-size: 0.85rem;
+  }
+  footer a {
+    color: #6b5d4d;
+    text-decoration: none;
+  }
+
+  @media (max-width: 640px) {
+    header { padding: 1rem; }
+    nav { display: none; }
+    .hero-banner { margin: 1rem; }
+    .banner-inner {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.8rem;
+    }
+    .banner-btn { align-self: stretch; text-align: center; }
+    .stats-banner { font-size: 0.7rem; }
+    main { padding: 0 1rem; }
+    .podium { gap: 0.5rem; }
+    .pedestal { width: 100px; }
+    .avatar { width: 52px; height: 52px; }
+    .avatar-first { width: 64px; height: 64px; }
+    .podium-name { font-size: 0.75rem; max-width: 95px; }
+    .date { display: none; }
+    .view-prs { display: none; }
+    th:nth-child(4), th:nth-child(5), th:nth-child(6) { display: none; }
+    table { table-layout: auto; }
+  }
+</style>
