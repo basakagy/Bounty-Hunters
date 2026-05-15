@@ -99,3 +99,4 @@ Automated tracking of all Clankers PR contributors.
 | StevenXing1011 | 1 | 2026-05-14T20:07:42.917Z | 2026-05-14T20:07:42.917Z |
 | SUNNY-Fu-ai | 1 | 2026-05-14T21:26:48.524Z | 2026-05-14T21:26:48.524Z |
 | DragonHa-XIA | 1 | 2026-05-14T23:55:37.421Z | 2026-05-14T23:55:37.421Z |
+| airdropp20208-star | 1 | 2026-05-15T01:05:39.501Z | 2026-05-15T01:05:39.501Z |
