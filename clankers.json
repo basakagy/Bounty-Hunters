@@ -588,6 +588,12 @@
     "last_pr": "2026-05-17T07:14:47.838Z"
   },
   {
+    "username": "Alex-2Code",
+    "total_prs": 2,
+    "first_pr": "2026-05-17T18:07:52.329Z",
+    "last_pr": "2026-05-18T00:09:25.616Z"
+  },
+  {
     "username": "ErenCankutUYSAL",
     "total_prs": 1,
     "first_pr": "2026-05-13T19:25:27Z",
@@ -892,11 +898,5 @@
     "total_prs": 1,
     "first_pr": "2026-05-17T17:15:51.734Z",
     "last_pr": "2026-05-17T17:15:51.734Z"
-  },
-  {
-    "username": "Alex-2Code",
-    "total_prs": 1,
-    "first_pr": "2026-05-17T18:07:52.329Z",
-    "last_pr": "2026-05-17T18:07:52.329Z"
   }
 ]
