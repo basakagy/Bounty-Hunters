@@ -327,6 +327,118 @@ class OAuth2PasswordRequestFormStrict(OAuth2PasswordRequestForm):
         )
 
 
+class OAuth2RefreshRequestForm:
+    """
+    This is a dependency class to collect the `refresh_token` and optional fields
+    for an OAuth2 refresh token flow.
+
+    All the initialization parameters are extracted from the request using form data.
+
+    ## Example
+
+    ```python
+    from typing import Annotated
+
+    from fastapi import Depends, FastAPI
+    from fastapi.security import OAuth2RefreshRequestForm
+
+    app = FastAPI()
+
+
+    @app.post("/refresh")
+    def refresh(form_data: Annotated[OAuth2RefreshRequestForm, Depends()]):
+        data = {}
+        if form_data.refresh_token:
+            data["refresh_token"] = form_data.refresh_token
+        if form_data.scope:
+            data["scopes"] = form_data.scopes
+        if form_data.client_id:
+            data["client_id"] = form_data.client_id
+        if form_data.client_secret:
+            data["client_secret"] = form_data.client_secret
+        return data
+    ```
+    """
+
+    def __init__(
+        self,
+        *,
+        grant_type: Annotated[
+            str | None,
+            Form(pattern="^refresh_token$"),
+            Doc(
+                """
+                The OAuth2 spec says the grant type should be "refresh_token". This
+                dependency class is permissive and allows not passing it, but validates
+                the value if provided.
+                """
+            ),
+        ] = None,
+        refresh_token: Annotated[
+            str,
+            Form(),
+            Doc(
+                """
+                The refresh token issued to the client. This is the token that can be
+                exchanged for a new access token.
+                """
+            ),
+        ],
+        scope: Annotated[
+            str,
+            Form(),
+            Doc(
+                """
+                A single string with actually several scopes separated by spaces. Each
+                scope is also a string.
+
+                For example, a single string with:
+
+                ```python
+                "items:read items:write users:read profile openid"
+                ````
+
+                would represent the scopes:
+
+                * `items:read`
+                * `items:write`
+                * `users:read`
+                * `profile`
+                * `openid`
+                """
+            ),
+        ] = "",
+        client_id: Annotated[
+            str | None,
+            Form(),
+            Doc(
+                """
+                If there's a `client_id`, it can be sent as part of the form fields.
+                But the OAuth2 specification recommends sending the `client_id` and
+                `client_secret` (if any) using HTTP Basic auth.
+                """
+            ),
+        ] = None,
+        client_secret: Annotated[
+            str | None,
+            Form(json_schema_extra={"format": "password"}),
+            Doc(
+                """
+                If there's a `client_secret` (and a `client_id`), they can be sent
+                as part of the form fields. But the OAuth2 specification recommends
+                sending the `client_id` and `client_secret` (if any) using HTTP Basic
+                auth.
+                """
+            ),
+        ] = None,
+    ):
+        self.grant_type = grant_type
+        self.refresh_token = refresh_token
+        self.scopes = scope.split()
+        self.client_id = client_id
+        self.client_secret = client_secret
+
+
 class OAuth2(SecurityBase):
     """
     This is the base class for OAuth2 authentication, an instance of it would be used
@@ -542,6 +654,110 @@ class OAuth2PasswordBearer(OAuth2):
             else:
                 return None
         return param
+
+
+class OAuth2PasswordBearerWithRefresh(OAuth2PasswordBearer):
+    """
+    OAuth2 flow for authentication using a bearer token obtained with a password,
+    with explicit support for a refresh URL.
+
+    This class extends `OAuth2PasswordBearer` and requires a `refresh_url` parameter
+    that will be included in the OpenAPI schema under the OAuth2 security scheme.
+
+    ## Example
+
+    ```python
+    from typing import Annotated
+
+    from fastapi import Depends, FastAPI
+    from fastapi.security import OAuth2PasswordBearerWithRefresh
+
+    app = FastAPI()
+
+    oauth2_scheme = OAuth2PasswordBearerWithRefresh(
+        tokenUrl="/token",
+        refreshUrl="/token/refresh",
+    )
+
+
+    @app.get("/items/")
+    async def read_items(token: Annotated[str, Depends(oauth2_scheme)]):
+        return {"token": token}
+    ```
+    """
+
+    def __init__(
+        self,
+        tokenUrl: Annotated[
+            str,
+            Doc(
+                """
+                The URL to obtain the OAuth2 token. This would be the *path operation*
+                that has `OAuth2PasswordRequestForm` as a dependency.
+                """
+            ),
+        ],
+        refreshUrl: Annotated[
+            str,
+            Doc(
+                """
+                The URL to refresh the OAuth2 token and obtain a new one.
+                This URL will appear in the OpenAPI schema's security schemes.
+                """
+            ),
+        ],
+        scheme_name: Annotated[
+            str | None,
+            Doc(
+                """
+                Security scheme name.
+
+                It will be included in the generated OpenAPI (e.g. visible at `/docs`).
+                """
+            ),
+        ] = None,
+        scopes: Annotated[
+            dict[str, str] | None,
+            Doc(
+                """
+                The OAuth2 scopes that would be required by the *path operations* that
+                use this dependency.
+                """
+            ),
+        ] = None,
+        description: Annotated[
+            str | None,
+            Doc(
+                """
+                Security scheme description.
+                """
+            ),
+        ] = None,
+        auto_error: Annotated[
+            bool,
+            Doc(
+                """
+                By default, if no HTTP Authorization header is provided, required for
+                OAuth2 authentication, it will automatically cancel the request and
+                send the client an error.
+
+                If `auto_error` is set to `False`, when the HTTP Authorization header
+                is not available, instead of erroring out, the dependency result will
+                be `None`.
+
+                This is useful when you want to have optional authentication.
+                """
+            ),
+        ] = True,
+    ):
+        super().__init__(
+            tokenUrl=tokenUrl,
+            refreshUrl=refreshUrl,
+            scheme_name=scheme_name,
+            scopes=scopes,
+            description=description,
+            auto_error=auto_error,
+        )
 
 
 class OAuth2AuthorizationCodeBearer(OAuth2):
