@@ -1,0 +1,5 @@
+{
+  "tool_name": "Hermes Agent",
+  "boot_context": "Hermes Agent AI coding assistant operating on Linux. Task: Implement environment variable validation for T3 Code server (Issue #853). Codebase: TypeScript monorepo with Effect/Schema, Vitest tests. Working directory: ~/Bounty-Hunters/t3code/. Must include /claim #853 in PR body. Must include _provenance.json.",
+  "timestamp": "2026-05-22T00:50:00+08:00"
+}
