@@ -74,6 +74,28 @@ export const terminalRestartsTotal = Metric.counter("t3_terminal_restarts_total"
   description: "Total terminal restart requests handled.",
 });
 
+// ─── Prometheus metrics ──────────────────────────────────────────────
+
+/**
+ * Active provider sessions gauge.
+ *
+ * Tracks the current number of active (running) provider sessions.
+ * Updated when sessions start and stop.
+ */
+export const activeSessions = Metric.gauge("active_sessions", {
+  description: "Current number of active provider sessions.",
+});
+
+/**
+ * Memory usage gauge (bytes).
+ *
+ * Reports the current RSS memory usage of the server process.
+ * Updated periodically by the process resource monitor.
+ */
+export const memoryUsageBytes = Metric.gauge("memory_usage_bytes", {
+  description: "Current RSS memory usage of the server process in bytes.",
+});
+
 export const metricAttributes = (
   attributes: Readonly<Record<string, unknown>>,
 ): ReadonlyArray<[string, string]> => Object.entries(compactMetricAttributes(attributes));

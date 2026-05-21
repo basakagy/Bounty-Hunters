@@ -1,0 +1,5 @@
+{
+  "agent": "Hermes Agent basakagy",
+  "initial_directives": "## 项目环境\n- 工作目录: ~/Bounty-Hunters/t3code/\n- 包管理器: bun (在 t3code/ 目录下运行)\n- git remote: \n  - origin = basakagy/Bounty-Hunters fork\n  - upstream = UnsafeLabs/Bounty-Hunters (原始仓库)\n- 测试命令: bun run test (不是 bun test)\n- 格式化和类型检查: bun fmt, bun lint, bun typecheck\n\n## Issue信息\nIssue #833 位于 UnsafeLabs/Bounty-Hunters\n- 初始化先 git fetch upstream && git checkout main && git merge upstream/main\n- 创建新分支: agent/prometheus-metrics-833\n- 修改文件: \n  - apps/server/src/metricsRoute.ts (新增 - 完整的 /metrics HTTP端点)\n  - apps/server/src/server.ts (注册 metricsRouteLayer)\n  - apps/server/src/observability/Metrics.ts (新增 activeSessions 和 memoryUsageBytes 指标)\n- 使用 Effect.Metric API 注册和收集指标\n- 端点路由: GET /metrics，返回 Prometheus exposition format 文本\n- 使用 Metric.snapshot 读取所有已注册的 Effect.Metric 并格式化\n- 认证: 可选，通过 METRICS_AUTH_DISABLED 环境变量控制跳过\n\n## 关键规范\n- PR body 第一行必须是 `/claim #833`\n- PR body 中不能包含任何其他 issue 编号（如 #611, #270 等）\n- 完成后运行全部验证命令(bun fmt, bun lint, bun typecheck, bun run test)\n- 创建 .generation_meta.json 文件",
+  "date": "2026-05-22T02:38:00Z"
+}
