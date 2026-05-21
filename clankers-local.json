@@ -828,6 +828,12 @@
     "last_pr": "2026-05-21T13:24:37.364Z"
   },
   {
+    "username": "ar-amk",
+    "total_prs": 2,
+    "first_pr": "2026-05-21T13:24:23.540Z",
+    "last_pr": "2026-05-21T13:33:37.586Z"
+  },
+  {
     "username": "ErenCankutUYSAL",
     "total_prs": 1,
     "first_pr": "2026-05-13T19:25:27Z",
@@ -1192,11 +1198,5 @@
     "total_prs": 1,
     "first_pr": "2026-05-21T13:22:03.969Z",
     "last_pr": "2026-05-21T13:22:03.969Z"
-  },
-  {
-    "username": "ar-amk",
-    "total_prs": 1,
-    "first_pr": "2026-05-21T13:24:23.540Z",
-    "last_pr": "2026-05-21T13:24:23.540Z"
   }
 ]
