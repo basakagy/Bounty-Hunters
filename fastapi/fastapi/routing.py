@@ -78,6 +78,7 @@ from starlette._utils import is_async_callable
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
+from starlette.middleware import Middleware as Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import (
@@ -1201,6 +1202,21 @@ class APIRouter(routing.Router):
                 """
             ),
         ] = None,
+        middleware: Annotated[
+            Sequence[Middleware] | None,
+            Doc(
+                """
+                List of middleware to be added when creating this router.
+
+                Router-level middleware only applies to routes registered on this
+                specific router. Routes on other routers or the main app will not
+                be affected.
+
+                Read more about it in the
+                [FastAPI docs for Middleware](https://fastapi.tiangolo.com/tutorial/middleware/).
+                """
+            ),
+        ] = None,
         deprecated: Annotated[
             bool | None,
             Doc(
@@ -1279,11 +1295,16 @@ class APIRouter(routing.Router):
             lifespan_context = lifespan
         self.lifespan_context = lifespan_context
 
+        # Process and store router-level middleware for later use
+        self.user_middleware: list[Middleware] = list(middleware) if middleware else []
+        # Pass middleware to Starlette's Router to build internal middleware stack
+
         super().__init__(
             routes=routes,
             redirect_slashes=redirect_slashes,
             default=default,
             lifespan=lifespan_context,
+            middleware=self.user_middleware,
         )
         if prefix:
             assert prefix.startswith("/"), "A path prefix must start with '/'"
@@ -1313,6 +1334,53 @@ class APIRouter(routing.Router):
         self.default_response_class = default_response_class
         self.generate_unique_id_function = generate_unique_id_function
         self.strict_content_type = strict_content_type
+
+    def add_middleware(
+        self,
+        cls: type[ASGIApp],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Add a middleware to this router.
+
+        The middleware will only apply to routes registered on this router.
+        Routes on other routers or the main app will not be affected.
+
+        Read more about it in the
+        [FastAPI docs for Middleware](https://fastapi.tiangolo.com/tutorial/middleware/).
+
+        ## Example
+
+        ```python
+        from fastapi import APIRouter
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        router = APIRouter()
+
+        class CustomMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                response = await call_next(request)
+                response.headers["X-Custom"] = "value"
+                return response
+
+        router.add_middleware(CustomMiddleware)
+        ```
+        """
+        self.user_middleware.append(Middleware(cls, *args, **kwargs))
+
+    def _build_middleware_stack_for_app(self, app: ASGIApp) -> ASGIApp:
+        """Build a middleware stack wrapping the given ASGI app with this router's middleware."""
+        result = app
+        for cls, args, kwargs in reversed(self.user_middleware):
+            result = cls(result, *args, **kwargs)
+        return result
+
+    def _wrap_handle_with_middleware(self, handle_method: ASGIApp) -> ASGIApp:
+        """Wrap a route's handle method with this router's middleware."""
+        if not self.user_middleware:
+            return handle_method
+        return self._build_middleware_stack_for_app(handle_method)
 
     def route(
         self,
@@ -1414,6 +1482,18 @@ class APIRouter(routing.Router):
                 strict_content_type, self.strict_content_type
             ),
         )
+        # Wrap route handle with router-level middleware if configured
+        if self.user_middleware:
+            original_handle = route.handle
+            mw_list = self.user_middleware
+
+            async def _mw_wrapped_handle(scope: Scope, receive: Receive, send: Send) -> None:
+                app: ASGIApp = original_handle
+                for mw_cls, mw_args, mw_kwargs in reversed(mw_list):
+                    app = mw_cls(app, *mw_args, **mw_kwargs)
+                await app(scope, receive, send)
+
+            route.handle = _mw_wrapped_handle
         self.routes.append(route)
 
     def api_route(
@@ -1794,6 +1874,21 @@ class APIRouter(routing.Router):
                         self.strict_content_type,
                     ),
                 )
+                # Wrap newly added route with included router's middleware
+                if router.user_middleware and self.routes:
+                    new_route = self.routes[-1]
+                    original_handle = new_route.handle
+                    mw_list = router.user_middleware
+
+                    async def _include_mw_handle(
+                        scope: Scope, receive: Receive, send: Send
+                    ) -> None:
+                        app: ASGIApp = original_handle
+                        for mw_cls, mw_args, mw_kwargs in reversed(mw_list):
+                            app = mw_cls(app, *mw_args, **mw_kwargs)
+                        await app(scope, receive, send)
+
+                    new_route.handle = _include_mw_handle
             elif isinstance(route, routing.Route):
                 methods = list(route.methods or [])
                 self.add_route(
