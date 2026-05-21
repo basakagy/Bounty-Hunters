@@ -37,6 +37,31 @@ const DEFAULT_BACKEND_READINESS_REQUEST_TIMEOUT = Duration.seconds(1);
 const DEFAULT_BACKEND_TERMINATE_GRACE = Duration.seconds(2);
 const BACKEND_READINESS_PATH = "/.well-known/t3/environment";
 
+// Health check constants
+const HEALTH_CHECK_INTERVAL = Duration.seconds(15);
+const MAX_CONSECUTIVE_HEALTH_FAILURES = 3;
+const HEALTH_CHECK_REQUEST_TIMEOUT = Duration.seconds(5);
+const MAX_RESTART_ATTEMPTS_BEFORE_ERROR = 3;
+
+export class BackendHealthCheckFailedError extends Data.TaggedError(
+  "BackendHealthCheckFailedError",
+)<{
+  readonly consecutiveFailures: number;
+  readonly url: URL;
+}> {
+  override get message() {
+    return `Backend health check failed (${this.consecutiveFailures} consecutive) at ${this.url.href}.`;
+  }
+}
+
+export class BackendRestartFailedError extends Data.TaggedError("BackendRestartFailedError")<{
+  readonly restartAttempts: number;
+}> {
+  override get message() {
+    return `Backend restart failed after ${this.restartAttempts} attempts. Please quit or retry manually.`;
+  }
+}
+
 type BackendProcessLayerServices = ChildProcessSpawner.ChildProcessSpawner | HttpClient.HttpClient;
 
 type BackendProcessRunRequirements = BackendProcessLayerServices | Scope.Scope;
@@ -191,6 +216,60 @@ const waitForHttpReady = Effect.fn("desktop.backendManager.waitForHttpReady")(fu
     Effect.asVoid,
     Effect.timeout(timeout),
     Effect.mapError(() => new BackendTimeoutError({ url: readinessUrl })),
+  );
+});
+
+const runHealthCheck = Effect.fn("desktop.backendManager.runHealthCheck")(function* (
+  baseUrl: URL,
+  runId: number,
+  onThreeConsecutiveFailures: Effect.Effect<void>,
+): Effect.fn.Return<void, never, HttpClient.HttpClient> {
+  const readinessUrl = new URL(BACKEND_READINESS_PATH, baseUrl);
+  const client = (yield* HttpClient.HttpClient).pipe(
+    HttpClient.filterStatusOk,
+    HttpClient.transformResponse(Effect.timeout(HEALTH_CHECK_REQUEST_TIMEOUT)),
+  );
+
+  const schedule = Schedule.spaced(HEALTH_CHECK_INTERVAL).pipe(Schedule.jittered);
+  const consecutiveFailures = yield* Ref.make(0);
+
+  const doHealthCheck = Effect.fn("desktop.backendManager.doHealthCheck")(function* () {
+    const result = yield* client.get(readinessUrl).pipe(
+      Effect.asVoid,
+      Effect.either,
+    );
+
+    if (Effect.isSuccess(result)) {
+      yield* Ref.set(consecutiveFailures, 0);
+      return;
+    }
+
+    const count = yield* Ref.updateAndGet(consecutiveFailures, (n) => n + 1);
+    yield* logBackendManagerWarning("backend health check failed", {
+      consecutiveFailures: count,
+      url: readinessUrl.href,
+    });
+
+    if (count < MAX_CONSECUTIVE_HEALTH_FAILURES) {
+      return;
+    }
+
+    // 3 consecutive failures — trigger restart via callback
+    yield* logBackendManagerError("backend health check: 3 consecutive failures, triggering restart", {
+      url: readinessUrl.href,
+    });
+    yield* Ref.set(consecutiveFailures, 0);
+    yield* onThreeConsecutiveFailures;
+  });
+
+  yield* doHealthCheck.pipe(
+    Effect.repeat(schedule),
+    Effect.catchCause((cause) =>
+      logBackendManagerError("backend health check fiber failed", {
+        cause: Cause.pretty(cause),
+      }),
+    ),
+    Effect.ignore,
   );
 });
 
@@ -464,6 +543,13 @@ const makeDesktopBackendManager = Effect.fn("makeDesktopBackendManager")(functio
                 }),
               ),
             );
+
+            // Start periodic health check fiber
+            yield* runHealthCheck(config.httpBaseUrl, runId, onThreeConsecutiveFailures).pipe(
+              Effect.provideService(HttpClient.HttpClient, httpClient),
+              Effect.forkIn(runScope),
+              Effect.asVoid,
+            );
           }),
           onReadinessFailure: (error) =>
             logBackendManagerWarning("backend readiness check failed during bootstrap", {
@@ -549,6 +635,35 @@ const makeDesktopBackendManager = Effect.fn("makeDesktopBackendManager")(functio
       }),
     });
   });
+
+  const onThreeConsecutiveFailures = Effect.fn("desktop.backendManager.onThreeConsecutiveFailures")(
+    function* () {
+      yield* mutex.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* Ref.get(state);
+          if (Option.isNone(current.active)) {
+            return;
+          }
+
+          yield* logBackendManagerError(
+            "backend health check: restarting after 3 consecutive failures",
+            {},
+          );
+
+          yield* Ref.update(state, (latest) => ({
+            ...latest,
+            active: Option.none<ActiveBackendRun>(),
+            ready: false,
+          }));
+          yield* Ref.set(desktopState.backendReady, false);
+
+          if (current.desiredRunning) {
+            yield* scheduleRestart("health check: 3 consecutive failures");
+          }
+        }),
+      );
+    },
+  );
 
   const stop = Effect.fn("desktop.backendManager.stop")(function* (options?: {
     readonly timeout?: Duration.Duration;

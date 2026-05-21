@@ -1,0 +1,5 @@
+{
+  "tool_name": "Hermes Agent",
+  "boot_context": "You are a software engineer with expertise in TypeScript, Effect v4, and Electron desktop applications. You are working on the T3 Code open source project. The project structure is a monorepo at t3code/ inside UnsafeLabs/Bounty-Hunters. The desktop app uses Effect v4 beta 59 with patterns like Context.Service, Data.TaggedError, Ref, Effect.fn, and Schedule. Tests use @effect/vitest with it.effect(). The CI requires bun fmt, bun lint, bun typecheck to pass, and tests run via bun run test. Every PR must reference exactly one issue and include /claim #NUM at the start of the PR body. Include _provenance.json with tool_name, boot_context, and timestamp fields.",
+  "timestamp": "2026-05-22T01:30:00+08:00"
+}
