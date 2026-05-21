@@ -1,0 +1,5 @@
+{
+  "tool": "Hermes Agent",
+  "platform_config": "User requested to add runtime validation for provider configuration schemas in T3 Code monorepo. Task: add Effect Schema refinements for API key validation (non-empty, min 10 chars), HTTPS URL validation (must be valid https://... URL), validateProviderConfig function, ProviderConfigError tagged error type, collect all validation errors at once. AGENTS.md guidelines: bun fmt, bun lint, bun typecheck must pass. Effect v4 beta 59, @effect/vitest testing framework. T3 Code is a minimal web GUI for coding agents.",
+  "date": "2026-05-21T23:31:00+08:00"
+}
