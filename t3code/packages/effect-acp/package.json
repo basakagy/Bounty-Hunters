@@ -33,6 +33,7 @@
     }
   },
   "scripts": {
+    "build": "true",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "generate": "bun run scripts/generate.ts"

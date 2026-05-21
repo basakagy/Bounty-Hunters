@@ -1,0 +1,5 @@
+{
+  "contributor": "Hermes Agent",
+  "generation_context": "User requested to fix turbo.json dependency graph for T3 Code monorepo. Task: add proper dependsOn relationships between build tasks, change dev task to depend on all upstream builds (^build), add no-op build scripts to source-only packages for cache tracking. Issue #828: Fix turbo.json missing dependency graph for incremental builds. Acceptance criteria: Changing only packages/contracts triggers rebuild of dependent apps; build cache works correctly; full build order respects dependency graph; no circular dependencies; existing build commands still work.",
+  "completed_at": "2026-05-21T23:30:00+08:00"
+}

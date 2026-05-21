@@ -93,6 +93,7 @@
     }
   },
   "scripts": {
+    "build": "true",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
