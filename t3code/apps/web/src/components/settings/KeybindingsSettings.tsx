@@ -1,4 +1,7 @@
 import {
+  ArrowDownNarrowWideIcon,
+  ArrowUpDownIcon,
+  ArrowUpNarrowWideIcon,
   ChevronDownIcon,
   CircleXIcon,
   EllipsisIcon,
@@ -802,7 +805,7 @@ function KeybindingTableRow({
   };
 
   return (
-    <div className="grid grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(210px,1fr)_60px] items-center px-4 py-1.5 text-sm even:bg-muted/15 hover:bg-accent/40">
+    <div className="grid grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(200px,1fr)_minmax(70px,0.3fr)_50px] items-center px-4 py-1.5 text-sm even:bg-muted/15 hover:bg-accent/40">
       <div className="min-w-0 pr-4">
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="truncate text-[13px] font-medium text-foreground" title={row.command}>
@@ -871,6 +874,18 @@ function KeybindingTableRow({
             />
           </PopoverContent>
         </Popover>
+      </div>
+      <div className="pr-3">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+            row.source === "Default" && "bg-muted/60 text-muted-foreground",
+            row.source === "Custom" && "bg-primary/10 text-primary",
+            row.source === "Project" && "bg-chart-2/10 text-chart-2",
+          )}
+        >
+          {row.source}
+        </span>
       </div>
       <div className="flex items-center justify-end gap-1">
         <KeybindingConflictWarning labels={conflictLabels} />
@@ -963,7 +978,7 @@ function NewKeybindingTableRow({
   };
 
   return (
-    <div className="grid grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(210px,1fr)_60px] items-center px-4 py-1.5 text-sm even:bg-muted/15 hover:bg-accent/40">
+    <div className="grid grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(200px,1fr)_minmax(70px,0.3fr)_50px] items-center px-4 py-1.5 text-sm even:bg-muted/15 hover:bg-accent/40">
       <div className="min-w-0 pr-4">
         <Select
           value={commandDraft}
@@ -1033,6 +1048,11 @@ function NewKeybindingTableRow({
           </PopoverContent>
         </Popover>
       </div>
+      <div className="pr-3">
+        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+          Custom
+        </span>
+      </div>
       <div className="flex items-center justify-end gap-1">
         <KeybindingConflictWarning labels={conflictLabels} />
         <Tooltip>
@@ -1066,7 +1086,28 @@ export function KeybindingsSettingsPanel() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [savingCommand, setSavingCommand] = useState<KeybindingCommand | null>(null);
   const [isAddingBinding, setIsAddingBinding] = useState(false);
-  const rows = useMemo(() => buildKeybindingRows(keybindings, query), [keybindings, query]);
+  const [sortBy, setSortBy] = useState<"command" | "key" | "source">("command");
+  const [sortDesc, setSortDesc] = useState(false);
+  const rawRows = useMemo(() => buildKeybindingRows(keybindings, query), [keybindings, query]);
+  const rows = useMemo(() => {
+    const sorted = [...rawRows];
+    sorted.sort((left, right) => {
+      let cmp: number;
+      switch (sortBy) {
+        case "key":
+          cmp = left.key.localeCompare(right.key);
+          break;
+        case "source":
+          cmp = left.source.localeCompare(right.source);
+          break;
+        default:
+          cmp = left.command.localeCompare(right.command);
+          break;
+      }
+      return sortDesc ? -cmp : cmp;
+    });
+    return sorted;
+  }, [rawRows, sortBy, sortDesc]);
   const commandOptions = useMemo(() => buildKeybindingCommandOptions(keybindings), [keybindings]);
   const whenVariables = useMemo(() => buildWhenVariableOptions(), []);
 
@@ -1240,11 +1281,58 @@ export function KeybindingsSettingsPanel() {
           hideScrollbars
           className="w-full max-w-full rounded-none"
         >
-          <div className="grid min-w-[680px] grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(210px,1fr)_60px] border-b border-border/70 bg-muted/25 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-            <div>Command</div>
-            <div>Keybinding</div>
-            <div>When</div>
-            <div>Status</div>
+          <div className="grid min-w-[760px] grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(200px,1fr)_minmax(70px,0.3fr)_50px] border-b border-border/70 bg-muted/25 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+            {(
+              [
+                ["command", "Command"],
+                ["key", "Keybinding"],
+                [null, "When"],
+                ["source", "Source"],
+                [null, ""],
+              ] as const
+            ).map(([field, label]) => (
+              <div
+                key={label}
+                role={field ? "button" : undefined}
+                tabIndex={field ? 0 : undefined}
+                className={cn(
+                  "flex items-center gap-1",
+                  field && "cursor-pointer select-none hover:text-foreground",
+                )}
+                onClick={() => {
+                  if (!field) return;
+                  if (sortBy === field) {
+                    setSortDesc(!sortDesc);
+                  } else {
+                    setSortBy(field);
+                    setSortDesc(false);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (!field) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    if (sortBy === field) {
+                      setSortDesc(!sortDesc);
+                    } else {
+                      setSortBy(field);
+                      setSortDesc(false);
+                    }
+                  }
+                }}
+              >
+                {label}
+                {field && sortBy === field ? (
+                  sortDesc ? (
+                    <ArrowDownNarrowWideIcon className="size-3" />
+                  ) : (
+                    <ArrowUpNarrowWideIcon className="size-3" />
+                  )
+                ) : field ? (
+                  <ArrowUpDownIcon className="size-3 opacity-30" />
+                ) : null}
+              </div>
+            ))}
           </div>
           <div className="min-w-[680px] divide-y divide-border/60">
             {isAddingBinding ? (

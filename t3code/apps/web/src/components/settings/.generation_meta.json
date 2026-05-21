@@ -1,0 +1,5 @@
+{
+  "agent": "Hermes Agent basakagy",
+  "initial_directives": "Add visual keybinding editor with conflict detection and recording - Add Source column showing Default/Custom/Project - Make all columns sortable via clickable headers - Keep existing recording, conflict detection, save, reset functionality",
+  "date": "2026-05-22T03:00:00Z"
+}
