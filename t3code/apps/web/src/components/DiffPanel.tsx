@@ -9,6 +9,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   Columns2Icon,
+  MessageSquareTextIcon,
   PilcrowIcon,
   Rows3Icon,
   TextWrapIcon,
@@ -39,6 +40,8 @@ import { useSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
+import { useDiffComments } from "~/hooks/useDiffComments";
+import { CommentCountBadge } from "./DiffCommentsIntegration";
 
 type DiffRenderMode = "stacked" | "split";
 type DiffThemeType = "light" | "dark";
@@ -198,6 +201,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const previousDiffOpenRef = useRef(false);
   const [canScrollTurnStripLeft, setCanScrollTurnStripLeft] = useState(false);
   const [canScrollTurnStripRight, setCanScrollTurnStripRight] = useState(false);
+  const diffComments = useDiffComments();
   const routeThreadRef = useParams({
     strict: false,
     select: (params) => resolveThreadRouteRef(params),
@@ -610,6 +614,15 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
         >
           <PilcrowIcon className="size-3" />
         </Toggle>
+        <button
+          type="button"
+          className="relative inline-flex size-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted/50"
+          title={`${diffComments.getCommentCount()} pending comment${diffComments.getCommentCount() !== 1 ? "s" : ""}`}
+          aria-label={`${diffComments.getCommentCount()} comments`}
+        >
+          <MessageSquareTextIcon className="size-3" />
+          <CommentCountBadge count={diffComments.getCommentCount()} />
+        </button>
       </div>
     </>
   );
@@ -714,6 +727,25 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                           unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
                         }}
                       />
+                      {!collapsed && (
+                        <div className="border-t border-border/30 bg-muted/20 px-3 py-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              diffComments.openInput(
+                                filePath,
+                                diffComments.activeInput?.filePath === filePath
+                                  ? (diffComments.activeInput.lineNumber + 1)
+                                  : 1,
+                              )
+                            }
+                            className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            <MessageSquareTextIcon className="size-3" />
+                            Add comment
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
