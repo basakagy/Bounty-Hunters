@@ -1,0 +1,5 @@
+{
+  "agent": "basakagy",
+  "initialized_with": "Your task is to complete issue #821 — Add version command and --version flag to CLI. You are working in ~/Bounty-Hunters/ directory. The repo is UnsafeLabs/Bounty-Hunters. You need to add a --version flag and version subcommand to the T3 Code CLI.",
+  "timestamp": "2026-05-22T02:01:00Z"
+}
