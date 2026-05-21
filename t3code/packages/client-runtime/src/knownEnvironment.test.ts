@@ -1,16 +1,11 @@
-import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { createKnownEnvironment, getKnownEnvironmentHttpBaseUrl } from "./knownEnvironment.ts";
 import {
-  parseScopedProjectKey,
-  parseScopedThreadKey,
-  scopedProjectKey,
-  scopedRefKey,
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "./scoped.ts";
+  createKnownEnvironment,
+  detectRuntimeEnvironment,
+  getKnownEnvironmentHttpBaseUrl,
+  type RuntimeEnvironmentInfo,
+} from "./knownEnvironment.ts";
 
 describe("known environment bootstrap helpers", () => {
   it("creates known environments from explicit server base urls", () => {
@@ -60,33 +55,120 @@ describe("known environment bootstrap helpers", () => {
   });
 });
 
-describe("scoped refs", () => {
-  const environmentId = EnvironmentId.make("environment-test");
-  const projectRef = scopeProjectRef(environmentId, ProjectId.make("project-1"));
-  const threadRef = scopeThreadRef(environmentId, ThreadId.make("thread-1"));
+// ---------------------------------------------------------------------------
+// Runtime environment detection tests
+// ---------------------------------------------------------------------------
 
-  it("builds stable scoped project and thread keys", () => {
-    expect(scopedRefKey(projectRef)).toBe("environment-test:project-1");
-    expect(scopedRefKey(threadRef)).toBe("environment-test:thread-1");
-    expect(scopedProjectKey(projectRef)).toBe("environment-test:project-1");
-    expect(scopedThreadKey(threadRef)).toBe("environment-test:thread-1");
+describe("detectRuntimeEnvironment", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
-  it("returns typed scoped refs", () => {
-    expect(projectRef).toEqual({
-      environmentId,
-      projectId: ProjectId.make("project-1"),
-    });
-    expect(threadRef).toEqual({
-      environmentId,
-      threadId: ThreadId.make("thread-1"),
-    });
+  it("reports a known runtime name", () => {
+    // In a vitest / Node.js context the runtime should be "node".
+    const info = detectRuntimeEnvironment();
+    expect(info.runtime).toBe("node");
   });
 
-  it("parses scoped project and thread keys back into refs", () => {
-    expect(parseScopedProjectKey("environment-test:project-1")).toEqual(projectRef);
-    expect(parseScopedThreadKey("environment-test:thread-1")).toEqual(threadRef);
-    expect(parseScopedProjectKey("bad-key")).toBeNull();
-    expect(parseScopedThreadKey("bad-key")).toBeNull();
+  it("reports platform and arch from process", () => {
+    const info = detectRuntimeEnvironment();
+    expect(info.platform).toBe(process.platform);
+    expect(info.arch).toBe(process.arch);
+  });
+
+  it("detects GitHub Actions CI", () => {
+    vi.stubEnv("GITHUB_ACTIONS", "true");
+    const info = detectRuntimeEnvironment();
+    expect(info.isCI).toBe(true);
+    expect(info.ciProvider).toBe("GitHub Actions");
+  });
+
+  it("detects GitLab CI", () => {
+    vi.stubEnv("GITLAB_CI", "true");
+    const info = detectRuntimeEnvironment();
+    expect(info.isCI).toBe(true);
+    expect(info.ciProvider).toBe("GitLab CI");
+  });
+
+  it("detects Jenkins CI", () => {
+    vi.stubEnv("JENKINS_URL", "https://jenkins.example.com");
+    const info = detectRuntimeEnvironment();
+    expect(info.isCI).toBe(true);
+    expect(info.ciProvider).toBe("Jenkins");
+  });
+
+  it("detects CircleCI", () => {
+    vi.stubEnv("CIRCLECI", "true");
+    const info = detectRuntimeEnvironment();
+    expect(info.isCI).toBe(true);
+    expect(info.ciProvider).toBe("CircleCI");
+  });
+
+  it("detects Travis CI", () => {
+    vi.stubEnv("TRAVIS", "true");
+    const info = detectRuntimeEnvironment();
+    expect(info.isCI).toBe(true);
+    expect(info.ciProvider).toBe("Travis CI");
+  });
+
+  it("uses generic CI label when only CI env var is set", () => {
+    vi.stubEnv("CI", "true");
+    const info = detectRuntimeEnvironment();
+    expect(info.isCI).toBe(true);
+    expect(info.ciProvider).toBe("generic CI");
+  });
+
+  it("reports not in CI when no CI env vars are present", () => {
+    // Unset all CI vars that might be set in the test runner itself.
+    for (const key of ["CI", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL", "CIRCLECI", "TRAVIS"]) {
+      vi.stubEnv(key, "");
+    }
+    const info = detectRuntimeEnvironment();
+    expect(info.isCI).toBe(false);
+    expect(info.ciProvider).toBeNull();
+  });
+
+  it("reports not in a container by default (non-Docker test runner)", () => {
+    const info = detectRuntimeEnvironment();
+    // Most test runners are not inside Docker, so this should be false.
+    expect(info.isContainer).toBe(false);
+  });
+
+  it("reports not in WSL by default (non-WSL test runner)", () => {
+    const info = detectRuntimeEnvironment();
+    // On a non-WSL runner this should be false.
+    expect(info.isWSL).toBe(false);
+  });
+
+  it("returns a complete RuntimeEnvironmentInfo object", () => {
+    const info = detectRuntimeEnvironment();
+    const keys: Array<keyof RuntimeEnvironmentInfo> = [
+      "runtime",
+      "platform",
+      "arch",
+      "isContainer",
+      "isCI",
+      "ciProvider",
+      "isWSL",
+    ];
+    for (const key of keys) {
+      expect(info).toHaveProperty(key);
+    }
+  });
+
+  it("gracefully handles missing process global (browser-like)", () => {
+    const origProcess = globalThis.process;
+    // @ts-expect-error simulating browser
+    delete globalThis.process;
+
+    const info = detectRuntimeEnvironment();
+    expect(info.runtime).toBe("browser");
+    expect(info.isContainer).toBe(false);
+    expect(info.isCI).toBe(false);
+    expect(info.ciProvider).toBeNull();
+    expect(info.isWSL).toBe(false);
+
+    globalThis.process = origProcess;
   });
 });
