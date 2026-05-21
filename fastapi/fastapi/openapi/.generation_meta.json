@@ -1,0 +1,5 @@
+{
+  "agent": "Hermes Agent basakagy",
+  "initial_directives": "You are a GitHub bounty hunter. Your task is to fix hardcoded CDN URLs in FastAPI's Swagger UI and ReDoc HTML generation by adding optional URL override parameters. Steps: 1) Read the existing docs.py file 2) Add swagger_js_url and swagger_css_url optional parameters to get_swagger_ui_html 3) Add redoc_js_url optional parameter to get_redoc_html 4) When provided, override the default CDN URLs 5) Update default URLs to latest stable versions 6) Maintain full backward compatibility 7) Create .generation_meta.json 8) Run tests to verify 9) Submit PR with /claim #762 in body",
+  "date": "2026-05-22T03:31:00Z"
+}
