@@ -30,11 +30,13 @@ interface PersistedSavedEnvironmentStorageRecord extends Omit<
 
 interface SavedEnvironmentRegistryDocument {
   readonly version: number;
+  readonly keyVersion?: number;
   readonly records: readonly PersistedSavedEnvironmentStorageRecord[];
 }
 
 interface SavedEnvironmentRegistryStorageDocument {
   readonly version?: number;
+  readonly keyVersion?: number;
   readonly records?: readonly PersistedSavedEnvironmentStorageRecord[];
 }
 
@@ -91,6 +93,27 @@ export class DesktopSavedEnvironmentSecretDecodeError extends Data.TaggedError(
   }
 }
 
+export class DesktopSavedEnvironmentsRotateError extends Data.TaggedError(
+  "DesktopSavedEnvironmentsRotateError",
+)<{
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return "Failed to rotate encryption keys for saved environments.";
+  }
+}
+
+export class DesktopSavedEnvironmentsRotatePartialError extends Data.TaggedError(
+  "DesktopSavedEnvironmentsRotatePartialError",
+)<{
+  readonly cause: unknown;
+  readonly reEncryptedCount: number;
+}> {
+  override get message() {
+    return `Partially rotated encryption keys: ${this.reEncryptedCount} credentials re-encrypted before failure.`;
+  }
+}
+
 export type DesktopSavedEnvironmentsGetSecretError =
   | DesktopSavedEnvironmentSecretDecodeError
   | ElectronSafeStorage.ElectronSafeStorageAvailabilityError
@@ -116,6 +139,10 @@ export interface DesktopSavedEnvironmentsShape {
   readonly removeSecret: (
     environmentId: string,
   ) => Effect.Effect<void, DesktopSavedEnvironmentsWriteError>;
+  readonly rotateSecrets: Effect.Effect<
+    number,
+    DesktopSavedEnvironmentsRotateError | DesktopSavedEnvironmentsRotatePartialError
+  >;
 }
 
 export class DesktopSavedEnvironments extends Context.Service<
@@ -171,6 +198,7 @@ function normalizeSavedEnvironmentRegistryDocument(
 ): SavedEnvironmentRegistryDocument {
   return {
     version: document.version ?? 1,
+    keyVersion: document.keyVersion,
     records: document.records ?? [],
   };
 }
@@ -345,6 +373,69 @@ export const layer = Layer.effect(
           }),
         });
       }),
+      rotateSecrets: Effect.fn("desktop.savedEnvironments.rotateSecrets")(function* () {
+        const document = yield* readRegistryDocument(
+          fileSystem,
+          environment.savedEnvironmentRegistryPath,
+        );
+
+        const recordsWithSecrets = document.records.filter(
+          (record) => record.encryptedBearerToken !== undefined,
+        );
+
+        if (recordsWithSecrets.length === 0) {
+          yield* Effect.logInfo("No encrypted secrets to rotate.");
+          return 0;
+        }
+
+        // Decrypt all secrets with the current key first
+        const decryptedSecrets = new Map<string, string>();
+        for (const record of recordsWithSecrets) {
+          if (!(yield* safeStorage.isEncryptionAvailable)) {
+            return yield* new DesktopSavedEnvironmentsRotateError({
+              cause: new Error("Encryption is not available."),
+            });
+          }
+          const secretBytes = yield* decodeSecretBytes(record.encryptedBearerToken!);
+          const decrypted = yield* safeStorage.decryptString(secretBytes);
+          decryptedSecrets.set(record.environmentId, decrypted);
+        }
+
+        // Generate a new key via rotation
+        const newKeyVersion = yield* safeStorage.rotateEncryptionKey;
+
+        // Re-encrypt with the new key
+        const reEncryptedRecords: PersistedSavedEnvironmentStorageRecord[] = [];
+        let reEncryptedCount = 0;
+        for (const record of document.records) {
+          const decrypted = decryptedSecrets.get(record.environmentId);
+          if (decrypted !== undefined) {
+            const encrypted = Encoding.encodeBase64(yield* safeStorage.encryptString(decrypted));
+            reEncryptedRecords.push(
+              toSavedEnvironmentStorageRecord(record, Option.some(encrypted)),
+            );
+            reEncryptedCount++;
+          } else {
+            reEncryptedRecords.push(record);
+          }
+        }
+
+        const nextDocument: SavedEnvironmentRegistryDocument = {
+          version: document.version,
+          keyVersion: newKeyVersion,
+          records: reEncryptedRecords,
+        };
+
+        yield* writeDocument(nextDocument);
+
+        yield* Effect.logInfo("Encryption keys rotated successfully.", {
+          timestamp: new Date().toISOString(),
+          count: reEncryptedCount,
+          keyVersion: newKeyVersion,
+        });
+
+        return reEncryptedCount;
+      }),
     });
   }),
 );
@@ -385,6 +476,11 @@ export const layerTest = (input?: {
             nextSecrets.delete(environmentId);
             return nextSecrets;
           }),
+        rotateSecrets: Effect.fn("desktop.savedEnvironments.test.rotateSecrets")(
+          function* () {
+            return 0;
+          },
+        ),
       });
     }),
   );
